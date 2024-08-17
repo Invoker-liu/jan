@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
-import { ExtensionType } from '@janhq/core'
-import { MonitoringExtension } from '@janhq/core'
+import { ExtensionTypeEnum, MonitoringExtension } from '@janhq/core'
 
 import { useSetAtom } from 'jotai'
 
@@ -10,57 +9,114 @@ import {
   cpuUsageAtom,
   totalRamAtom,
   usedRamAtom,
+  nvidiaTotalVramAtom,
+  gpusAtom,
+  ramUtilitizedAtom,
+  availableVramAtom,
 } from '@/helpers/atoms/SystemBar.atom'
 
 export default function useGetSystemResources() {
-  const [ram, setRam] = useState<number>(0)
-  const [cpu, setCPU] = useState<number>(0)
+  const [intervalId, setIntervalId] = useState<
+    NodeJS.Timeout | number | undefined
+  >(undefined)
+
   const setTotalRam = useSetAtom(totalRamAtom)
+  const setGpus = useSetAtom(gpusAtom)
   const setUsedRam = useSetAtom(usedRamAtom)
   const setCpuUsage = useSetAtom(cpuUsageAtom)
+  const setTotalNvidiaVram = useSetAtom(nvidiaTotalVramAtom)
+  const setAvailableVram = useSetAtom(availableVramAtom)
+  const setRamUtilitized = useSetAtom(ramUtilitizedAtom)
 
-  const getSystemResources = async () => {
+  const getSystemResources = useCallback(async () => {
     if (
-      !extensionManager.get<MonitoringExtension>(ExtensionType.SystemMonitoring)
+      !extensionManager.get<MonitoringExtension>(
+        ExtensionTypeEnum.SystemMonitoring
+      )
     ) {
       return
     }
     const monitoring = extensionManager.get<MonitoringExtension>(
-      ExtensionType.SystemMonitoring
+      ExtensionTypeEnum.SystemMonitoring
     )
     const resourceInfor = await monitoring?.getResourcesInfo()
     const currentLoadInfor = await monitoring?.getCurrentLoad()
 
-    const ram =
-      (resourceInfor?.mem?.usedMemory ?? 0) /
-      (resourceInfor?.mem?.totalMemory ?? 1)
     if (resourceInfor?.mem?.usedMemory) setUsedRam(resourceInfor.mem.usedMemory)
     if (resourceInfor?.mem?.totalMemory)
       setTotalRam(resourceInfor.mem.totalMemory)
 
-    setRam(Math.round(ram * 100))
-    setCPU(Math.round(currentLoadInfor?.cpu?.usage ?? 0))
+    const ramUtilitized =
+      ((resourceInfor?.mem?.usedMemory ?? 0) /
+        (resourceInfor?.mem?.totalMemory ?? 1)) *
+      100
+    setRamUtilitized(Math.round(ramUtilitized))
+
     setCpuUsage(Math.round(currentLoadInfor?.cpu?.usage ?? 0))
+
+    const gpus = currentLoadInfor?.gpu ?? []
+    setGpus(gpus)
+
+    let totalNvidiaVram = 0
+    if (gpus.length > 0) {
+      totalNvidiaVram = gpus.reduce(
+        (total: number, gpu: { memoryTotal: string }) =>
+          total + Number(gpu.memoryTotal),
+        0
+      )
+    }
+    setTotalNvidiaVram(totalNvidiaVram)
+    setAvailableVram(
+      gpus.reduce(
+        (total: number, gpu: { memoryFree: string }) =>
+          total + Number(gpu.memoryFree),
+        0
+      )
+    )
+  }, [
+    setUsedRam,
+    setTotalRam,
+    setRamUtilitized,
+    setCpuUsage,
+    setGpus,
+    setTotalNvidiaVram,
+    setAvailableVram,
+  ])
+
+  const watch = () => {
+    getSystemResources()
+
+    // Fetch interval - every 2s
+    const itv = setInterval(() => {
+      getSystemResources()
+    }, 2000)
+    setIntervalId(itv)
   }
+  const stopWatching = useCallback(() => {
+    if (intervalId) clearInterval(intervalId)
+  }, [intervalId])
 
   useEffect(() => {
     getSystemResources()
-
-    // Fetch interval - every 0.5s
-    // TODO: Will we really need this?
-    // There is a possibility that this will be removed and replaced by the process event hook?
-    const intervalId = setInterval(() => {
-      getSystemResources()
-    }, 500)
-
-    // clean up interval
-    return () => clearInterval(intervalId)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    // Component did unmount
+    // Stop watching if any
+    return () => {
+      stopWatching()
+    }
+  }, [getSystemResources, stopWatching])
 
   return {
-    totalRamAtom,
-    ram,
-    cpu,
+    /**
+     * Fetch resource information once
+     */
+    getSystemResources,
+    /**
+     *  Fetch & watch for resource update
+     */
+    watch,
+    /**
+     *  Stop watching
+     */
+    stopWatching,
   }
 }

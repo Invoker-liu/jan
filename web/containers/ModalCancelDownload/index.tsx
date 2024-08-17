@@ -1,100 +1,90 @@
-import { useMemo } from 'react'
+import { useCallback } from 'react'
 
 import { Model } from '@janhq/core'
 
-import {
-  Modal,
-  ModalTrigger,
-  ModalClose,
-  ModalFooter,
-  ModalContent,
-  ModalHeader,
-  Button,
-  ModalTitle,
-  Progress,
-} from '@janhq/uikit'
+import { Modal, Button, Progress, ModalClose } from '@janhq/joi'
 
-import { atom, useAtomValue } from 'jotai'
+import { useAtomValue } from 'jotai'
 
 import useDownloadModel from '@/hooks/useDownloadModel'
-import { useDownloadState } from '@/hooks/useDownloadState'
+
+import { modelDownloadStateAtom } from '@/hooks/useDownloadState'
 
 import { formatDownloadPercentage } from '@/utils/converter'
 
-import { downloadingModelsAtom } from '@/helpers/atoms/Model.atom'
+import { getDownloadingModelAtom } from '@/helpers/atoms/Model.atom'
 
 type Props = {
   model: Model
   isFromList?: boolean
 }
 
-export default function ModalCancelDownload({ model, isFromList }: Props) {
-  const { modelDownloadStateAtom } = useDownloadState()
-  const downloadingModels = useAtomValue(downloadingModelsAtom)
-  const downloadAtom = useMemo(
-    () => atom((get) => get(modelDownloadStateAtom)[model.id]),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [model.id]
-  )
-  const downloadState = useAtomValue(downloadAtom)
-  const cancelText = `Cancel ${formatDownloadPercentage(downloadState.percent)}`
+const ModalCancelDownload = ({ model, isFromList }: Props) => {
   const { abortModelDownload } = useDownloadModel()
+  const downloadingModels = useAtomValue(getDownloadingModelAtom)
+  const allDownloadStates = useAtomValue(modelDownloadStateAtom)
+  const downloadState = allDownloadStates[model.id]
+
+  const cancelText = `Cancel ${formatDownloadPercentage(downloadState.percent)}`
+
+  const onAbortDownloadClick = useCallback(() => {
+    if (downloadState?.modelId) {
+      const model = downloadingModels.find(
+        (model) => model.id === downloadState.modelId
+      )
+      if (model) abortModelDownload(model)
+    }
+  }, [downloadState, downloadingModels, abortModelDownload])
 
   return (
-    <Modal>
-      <ModalTrigger asChild>
-        {isFromList ? (
-          <Button themes="outline" size="sm">
+    <Modal
+      title="Cancel Download"
+      trigger={
+        isFromList ? (
+          <Button variant="outline" size="small">
             {cancelText}
           </Button>
         ) : (
-          <Button themes="secondaryBlue">
+          <Button variant="soft">
             <div className="flex items-center space-x-2">
               <span className="inline-block">Cancel</span>
               <Progress
-                className="inline-block h-2 w-[80px] bg-blue-100"
+                className="w-[80px]"
                 value={
                   formatDownloadPercentage(downloadState?.percent, {
                     hidePercentage: true,
                   }) as number
                 }
               />
-              <span>{formatDownloadPercentage(downloadState.percent)}</span>
+              <span className="tabular-nums">
+                {formatDownloadPercentage(downloadState.percent)}
+              </span>
             </div>
           </Button>
-        )}
-      </ModalTrigger>
-      <ModalContent>
-        <ModalHeader>
-          <ModalTitle>Cancel Download</ModalTitle>
-        </ModalHeader>
-        <p>
-          Are you sure you want to cancel the download of&nbsp;
-          {downloadState?.modelId}?
-        </p>
-        <ModalFooter>
-          <div className="flex gap-x-2">
+        )
+      }
+      content={
+        <div>
+          <p className="text-[hsla(var(--text-secondary))]">
+            Are you sure you want to cancel the download of&nbsp;
+            <span className="font-medium text-[hsla(var(--text-primary))]">
+              {downloadState?.modelId}?
+            </span>
+          </p>
+          <div className="mt-4 flex justify-end gap-x-2">
             <ModalClose asChild>
-              <Button themes="ghost">No</Button>
+              <Button theme="ghost">No</Button>
             </ModalClose>
             <ModalClose asChild>
-              <Button
-                themes="danger"
-                onClick={() => {
-                  if (downloadState?.modelId) {
-                    const model = downloadingModels.find(
-                      (model) => model.id === downloadState.modelId
-                    )
-                    if (model) abortModelDownload(model)
-                  }
-                }}
-              >
+              <Button theme="destructive" onClick={onAbortDownloadClick}>
                 Yes
               </Button>
             </ModalClose>
           </div>
-        </ModalFooter>
-      </ModalContent>
-    </Modal>
+        </div>
+      }
+    />
   )
 }
+
+export default ModalCancelDownload

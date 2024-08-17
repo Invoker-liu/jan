@@ -1,19 +1,14 @@
 'use client'
 
-import { PropsWithChildren, useEffect, useState } from 'react'
+import { PropsWithChildren, useCallback, useEffect, useState } from 'react'
 
 import { Toaster } from 'react-hot-toast'
 
-import { TooltipProvider } from '@janhq/uikit'
-
-import { PostHogProvider } from 'posthog-js/react'
-
-import GPUDriverPrompt from '@/containers/GPUDriverPromptModal'
+import Loader from '@/containers/Loader'
 import EventListenerWrapper from '@/containers/Providers/EventListener'
 import JotaiWrapper from '@/containers/Providers/Jotai'
-import ThemeWrapper from '@/containers/Providers/Theme'
 
-import FeatureToggleWrapper from '@/context/FeatureToggle'
+import ThemeWrapper from '@/containers/Providers/Theme'
 
 import { setupCoreServices } from '@/services/coreService'
 import {
@@ -21,32 +16,37 @@ import {
   setupBaseExtensions,
 } from '@/services/extensionService'
 
-import { instance } from '@/utils/posthog'
+import Umami from '@/utils/umami'
 
+import DataLoader from './DataLoader'
+
+import DeepLinkListener from './DeepLinkListener'
 import KeyListener from './KeyListener'
+import Responsive from './Responsive'
 
 import { extensionManager } from '@/extension'
 
-const Providers = (props: PropsWithChildren) => {
-  const { children } = props
-
+const Providers = ({ children }: PropsWithChildren) => {
   const [setupCore, setSetupCore] = useState(false)
   const [activated, setActivated] = useState(false)
+  const [settingUp, setSettingUp] = useState(false)
 
-  async function setupExtensions() {
+  const setupExtensions = useCallback(async () => {
     // Register all active extensions
     await extensionManager.registerActive()
 
     setTimeout(async () => {
       if (!isCoreExtensionInstalled()) {
-        setupBaseExtensions()
+        setSettingUp(true)
+        await setupBaseExtensions()
         return
       }
 
       extensionManager.load()
+      setSettingUp(false)
       setActivated(true)
     }, 500)
-  }
+  }, [])
 
   // Services Setup
   useEffect(() => {
@@ -67,28 +67,29 @@ const Providers = (props: PropsWithChildren) => {
         setActivated(true)
       }
     }
-  }, [setupCore])
+  }, [setupCore, setupExtensions])
 
   return (
-    <PostHogProvider client={instance}>
+    <ThemeWrapper>
       <JotaiWrapper>
-        <ThemeWrapper>
-          {setupCore && activated && (
-            <KeyListener>
-              <FeatureToggleWrapper>
+        <Umami />
+        {settingUp && <Loader description="Preparing Update..." />}
+        {setupCore && activated && (
+          <>
+            <Responsive>
+              <KeyListener>
                 <EventListenerWrapper>
-                  <TooltipProvider delayDuration={0}>
-                    {children}
-                  </TooltipProvider>
-                  {!isMac && <GPUDriverPrompt />}
+                  <DataLoader>
+                    <DeepLinkListener>{children}</DeepLinkListener>
+                  </DataLoader>
                 </EventListenerWrapper>
-                <Toaster position="top-right" />
-              </FeatureToggleWrapper>
-            </KeyListener>
-          )}
-        </ThemeWrapper>
+                <Toaster />
+              </KeyListener>
+            </Responsive>
+          </>
+        )}
       </JotaiWrapper>
-    </PostHogProvider>
+    </ThemeWrapper>
   )
 }
 

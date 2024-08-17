@@ -2,39 +2,17 @@
  * Export all types.
  * @module
  */
-export * from './types/index'
+export * from './types'
 
 /**
- * Export all routes
- */
-export * from './api'
-
-/**
- * Export Core module
+ * Export browser module
  * @module
  */
-export * from './core'
+export * from './browser'
 
 /**
- * Export Event module.
- * @module
+ * Declare global object
  */
-export * from './events'
-
-/**
- * Export Filesystem module.
- * @module
- */
-export * from './fs'
-
-/**
- * Export Extension module.
- * @module
- */
-export * from './extension'
-
-/**
- * Export all base extensions.
- * @module
- */
-export * from './extensions/index'
+declare global {
+  var core: any | undefined
+}

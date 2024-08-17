@@ -1,5 +1,6 @@
 import { ChatCompletionMessage, ChatCompletionRole } from '../inference'
 import { ModelInfo } from '../model'
+import { Thread } from '../thread'
 
 /**
  * The `ThreadMessage` type defines the shape of a thread's message object.
@@ -26,6 +27,11 @@ export type ThreadMessage = {
   updated: number
   /** The additional metadata of this message. **/
   metadata?: Record<string, unknown>
+
+  type?: string
+
+  /** The error code which explain what error type. Used in conjunction with MessageStatus.Error */
+  error_code?: ErrorCode
 }
 
 /**
@@ -35,7 +41,10 @@ export type ThreadMessage = {
 export type MessageRequest = {
   id?: string
 
-  /** The thread id of the message request. **/
+  /**
+   * @deprecated Use thread object instead
+   * The thread id of the message request.
+   */
   threadId: string
 
   /**
@@ -48,6 +57,12 @@ export type MessageRequest = {
 
   /** Settings for constructing a chat completion request **/
   model?: ModelInfo
+
+  /** The thread of this message is belong to. **/
+  // TODO: deprecate threadId field
+  thread?: Thread
+
+  type?: string
 }
 
 /**
@@ -62,7 +77,19 @@ export enum MessageStatus {
   /** Message loaded with error. **/
   Error = 'error',
   /** Message is cancelled streaming */
-  Stopped = "stopped"
+  Stopped = 'stopped',
+}
+
+export enum ErrorCode {
+  InvalidApiKey = 'invalid_api_key',
+
+  AuthenticationError = 'authentication_error',
+
+  InsufficientQuota = 'insufficient_quota',
+
+  InvalidRequestError = 'invalid_request_error',
+
+  Unknown = 'unknown',
 }
 
 /**
@@ -71,6 +98,7 @@ export enum MessageStatus {
 export enum ContentType {
   Text = 'text',
   Image = 'image',
+  Pdf = 'pdf',
 }
 
 /**
@@ -80,6 +108,8 @@ export enum ContentType {
 export type ContentValue = {
   value: string
   annotations: string[]
+  name?: string
+  size?: number
 }
 
 /**

@@ -1,3 +1,4 @@
+import { GpuSetting } from '../miscellaneous'
 import { Model } from './modelEntity'
 
 /**
@@ -7,9 +8,14 @@ export interface ModelInterface {
   /**
    * Downloads a model.
    * @param model - The model to download.
+   * @param network - Optional object to specify proxy/whether to ignore SSL certificates.
    * @returns A Promise that resolves when the model has been downloaded.
    */
-  downloadModel(model: Model): Promise<void>
+  downloadModel(
+    model: Model,
+    gpuSettings?: GpuSetting,
+    network?: { ignoreSSL?: boolean; proxy?: string }
+  ): Promise<void>
 
   /**
    * Cancels the download of a specific model.

@@ -35,17 +35,17 @@ async function registerExtensionProtocol() {
   let electron: any = undefined
 
   try {
-    const moduleName = "electron"
+    const moduleName = 'electron'
     electron = await import(moduleName)
   } catch (err) {
     console.error('Electron is not available')
   }
-  
-  if (electron) {
-    return electron.protocol.registerFileProtocol('extension', (request: any, callback: any) => {
+  const extensionPath = ExtensionManager.instance.getExtensionsPath()
+  if (electron && electron.protocol) {
+    return electron.protocol?.registerFileProtocol('extension', (request: any, callback: any) => {
       const entry = request.url.substr('extension://'.length - 1)
 
-      const url = normalize(ExtensionManager.instance.extensionsPath + entry)
+      const url = normalize(extensionPath + entry)
       callback({ path: url })
     })
   }
@@ -69,7 +69,7 @@ export function useExtensions(extensionsPath: string) {
 
   // Read extension list from extensions folder
   const extensions = JSON.parse(
-    readFileSync(ExtensionManager.instance.getExtensionsFile(), 'utf-8'),
+    readFileSync(ExtensionManager.instance.getExtensionsFile(), 'utf-8')
   )
   try {
     // Create and store a Extension instance for each extension in list
@@ -82,7 +82,7 @@ export function useExtensions(extensionsPath: string) {
     throw new Error(
       'Could not successfully rebuild list of installed extensions.\n' +
         error +
-        '\nPlease check the extensions.json file in the extensions folder.',
+        '\nPlease check the extensions.json file in the extensions folder.'
     )
   }
 
@@ -120,9 +120,9 @@ function loadExtension(ext: any) {
  * @returns {extensionManager} A set of functions used to manage the extension lifecycle.
  */
 export function getStore() {
-  if (!ExtensionManager.instance.extensionsPath) {
+  if (!ExtensionManager.instance.getExtensionsFile()) {
     throw new Error(
-      'The extension path has not yet been set up. Please run useExtensions before accessing the store',
+      'The extension path has not yet been set up. Please run useExtensions before accessing the store'
     )
   }
 

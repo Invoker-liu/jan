@@ -5,6 +5,7 @@ import {
   ThreadContent,
   ThreadState,
 } from '@janhq/core'
+
 import { atom } from 'jotai'
 
 export const engineParamsUpdateAtom = atom<boolean>(false)
@@ -23,10 +24,15 @@ export const setActiveThreadIdAtom = atom(
 
 export const waitingToSendMessage = atom<boolean | undefined>(undefined)
 
+export const isGeneratingResponseAtom = atom<boolean | undefined>(undefined)
 /**
  * Stores all thread states for the current user
  */
 export const threadStatesAtom = atom<Record<string, ThreadState>>({})
+
+// Whether thread data is ready or not
+export const threadDataReadyAtom = atom<boolean>(false)
+
 export const activeThreadStateAtom = atom<ThreadState | undefined>((get) => {
   const threadId = get(activeThreadIdAtom)
   if (!threadId) {
@@ -42,18 +48,6 @@ export const deleteThreadStateAtom = atom(
   (get, set, threadId: string) => {
     const currentState = { ...get(threadStatesAtom) }
     delete currentState[threadId]
-    set(threadStatesAtom, currentState)
-  }
-)
-
-export const updateThreadInitSuccessAtom = atom(
-  null,
-  (get, set, threadId: string) => {
-    const currentState = { ...get(threadStatesAtom) }
-    currentState[threadId] = {
-      ...currentState[threadId],
-      isFinishInit: true,
-    }
     set(threadStatesAtom, currentState)
   }
 )
@@ -134,13 +128,6 @@ export const setThreadModelParamsAtom = atom(
   (get, set, threadId: string, params: ModelParams) => {
     const currentState = { ...get(threadModelParamsAtom) }
     currentState[threadId] = params
-    console.debug(
-      `Update model params for thread ${threadId}, ${JSON.stringify(
-        params,
-        null,
-        2
-      )}`
-    )
     set(threadModelParamsAtom, currentState)
   }
 )

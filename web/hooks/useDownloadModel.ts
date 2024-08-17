@@ -1,54 +1,115 @@
+import { useCallback } from 'react'
+
 import {
   Model,
-  ExtensionType,
+  ExtensionTypeEnum,
   ModelExtension,
   abortDownload,
   joinPath,
+  ModelArtifact,
+  DownloadState,
+  GpuSetting,
 } from '@janhq/core'
 
-import { useSetAtom } from 'jotai'
+import { useAtomValue, useSetAtom } from 'jotai'
 
-import { modelBinFileName } from '@/utils/model'
+import { setDownloadStateAtom } from './useDownloadState'
 
-import { useDownloadState } from './useDownloadState'
+import useGpuSetting from './useGpuSetting'
 
 import { extensionManager } from '@/extension/ExtensionManager'
-import { addNewDownloadingModelAtom } from '@/helpers/atoms/Model.atom'
+import {
+  ignoreSslAtom,
+  proxyAtom,
+  proxyEnabledAtom,
+} from '@/helpers/atoms/AppConfig.atom'
+import { addDownloadingModelAtom } from '@/helpers/atoms/Model.atom'
 
 export default function useDownloadModel() {
-  const { setDownloadState } = useDownloadState()
-  const addNewDownloadingModel = useSetAtom(addNewDownloadingModelAtom)
+  const ignoreSSL = useAtomValue(ignoreSslAtom)
+  const proxy = useAtomValue(proxyAtom)
+  const proxyEnabled = useAtomValue(proxyEnabledAtom)
+  const setDownloadState = useSetAtom(setDownloadStateAtom)
+  const addDownloadingModel = useSetAtom(addDownloadingModelAtom)
 
-  const downloadModel = async (model: Model) => {
-    // set an initial download state
-    setDownloadState({
-      modelId: model.id,
-      time: {
-        elapsed: 0,
-        remaining: 0,
-      },
-      speed: 0,
-      percent: 0,
-      size: {
-        total: 0,
-        transferred: 0,
-      },
-    })
+  const { getGpuSettings } = useGpuSetting()
 
-    addNewDownloadingModel(model)
+  const downloadModel = useCallback(
+    async (model: Model) => {
+      const childProgresses: DownloadState[] = model.sources.map(
+        (source: ModelArtifact) => ({
+          fileName: source.filename,
+          modelId: model.id,
+          time: {
+            elapsed: 0,
+            remaining: 0,
+          },
+          speed: 0,
+          percent: 0,
+          size: {
+            total: 0,
+            transferred: 0,
+          },
+          downloadState: 'downloading',
+        })
+      )
 
-    await extensionManager
-      .get<ModelExtension>(ExtensionType.Model)
-      ?.downloadModel(model)
-  }
-  const abortModelDownload = async (model: Model) => {
-    await abortDownload(
-      await joinPath(['models', model.id, modelBinFileName(model)])
-    )
-  }
+      // set an initial download state
+      setDownloadState({
+        fileName: '',
+        modelId: model.id,
+        time: {
+          elapsed: 0,
+          remaining: 0,
+        },
+        speed: 0,
+        percent: 0,
+        size: {
+          total: 0,
+          transferred: 0,
+        },
+        children: childProgresses,
+        downloadState: 'downloading',
+      })
+
+      addDownloadingModel(model)
+      const gpuSettings = await getGpuSettings()
+      await localDownloadModel(
+        model,
+        ignoreSSL,
+        proxyEnabled ? proxy : '',
+        gpuSettings
+      )
+    },
+    [
+      ignoreSSL,
+      proxy,
+      proxyEnabled,
+      getGpuSettings,
+      addDownloadingModel,
+      setDownloadState,
+    ]
+  )
+
+  const abortModelDownload = useCallback(async (model: Model) => {
+    for (const source of model.sources) {
+      const path = await joinPath(['models', model.id, source.filename])
+      await abortDownload(path)
+    }
+  }, [])
 
   return {
     downloadModel,
     abortModelDownload,
   }
 }
+
+const localDownloadModel = async (
+  model: Model,
+  ignoreSSL: boolean,
+  proxy: string,
+  gpuSettings?: GpuSetting
+) =>
+  extensionManager
+    .get<ModelExtension>(ExtensionTypeEnum.Model)
+    ?.downloadModel(model, gpuSettings, { ignoreSSL, proxy })

@@ -2,37 +2,47 @@
 
 import { Fragment, ReactNode, useEffect } from 'react'
 
-import { atom, useSetAtom } from 'jotai'
+import { useAtomValue, useSetAtom } from 'jotai'
 
 import { MainViewState } from '@/constants/screens'
 
-import { useMainViewState } from '@/hooks/useMainViewState'
+import { useCreateNewThread } from '@/hooks/useCreateNewThread'
+
+import {
+  mainViewStateAtom,
+  showLeftPanelAtom,
+  showRightPanelAtom,
+} from '@/helpers/atoms/App.atom'
+import { assistantsAtom } from '@/helpers/atoms/Assistant.atom'
 
 type Props = {
   children: ReactNode
 }
 
-export const showLeftSideBarAtom = atom<boolean>(true)
-export const showSelectModelModalAtom = atom<boolean>(false)
-export const showCommandSearchModalAtom = atom<boolean>(false)
-
 export default function KeyListener({ children }: Props) {
-  const setShowLeftSideBar = useSetAtom(showLeftSideBarAtom)
-  const setShowSelectModelModal = useSetAtom(showSelectModelModalAtom)
-  const { setMainViewState } = useMainViewState()
-  const showCommandSearchModal = useSetAtom(showCommandSearchModalAtom)
+  const setShowLeftPanel = useSetAtom(showLeftPanelAtom)
+  const setShowRightPanel = useSetAtom(showRightPanelAtom)
+  const setMainViewState = useSetAtom(mainViewStateAtom)
+  const { requestCreateNewThread } = useCreateNewThread()
+  const assistants = useAtomValue(assistantsAtom)
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const prefixKey = isMac ? e.metaKey : e.ctrlKey
 
-      if (e.key === 'b' && prefixKey) {
-        setShowLeftSideBar((showLeftSideBar) => !showLeftSideBar)
+      if (e.key === 'b' && prefixKey && e.shiftKey) {
+        setShowRightPanel((showRightideBar) => !showRightideBar)
         return
       }
 
-      if (e.key === 'e' && prefixKey) {
-        setShowSelectModelModal((show) => !show)
+      if (e.key === 'n' && prefixKey) {
+        requestCreateNewThread(assistants[0])
+        setMainViewState(MainViewState.Thread)
+        return
+      }
+
+      if (e.key === 'b' && prefixKey) {
+        setShowLeftPanel((showLeftSideBar) => !showLeftSideBar)
         return
       }
 
@@ -40,16 +50,16 @@ export default function KeyListener({ children }: Props) {
         setMainViewState(MainViewState.Settings)
         return
       }
-
-      if (e.key === 'k' && prefixKey) {
-        showCommandSearchModal((show) => !show)
-        return
-      }
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [
+    assistants,
+    requestCreateNewThread,
+    setMainViewState,
+    setShowLeftPanel,
+    setShowRightPanel,
+  ])
 
   return <Fragment>{children}</Fragment>
 }

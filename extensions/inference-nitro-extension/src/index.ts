@@ -7,246 +7,185 @@
  */
 
 import {
-  ChatCompletionRole,
-  ContentType,
-  EventName,
-  MessageRequest,
-  MessageStatus,
-  ExtensionType,
-  ThreadContent,
-  ThreadMessage,
   events,
   executeOnMain,
-  fs,
   Model,
+  ModelEvent,
+  LocalOAIEngine,
+  InstallationState,
+  systemInformation,
+  fs,
+  getJanDataFolderPath,
   joinPath,
-} from "@janhq/core";
-import { InferenceExtension } from "@janhq/core";
-import { requestInference } from "./helpers/sse";
-import { ulid } from "ulid";
-import { join } from "path";
+  DownloadRequest,
+  baseName,
+  downloadFile,
+  DownloadState,
+  DownloadEvent,
+} from '@janhq/core'
 
+declare const CUDA_DOWNLOAD_URL: string
 /**
  * A class that implements the InferenceExtension interface from the @janhq/core package.
  * The class provides methods for initializing and stopping a model, and for making inference requests.
  * It also subscribes to events emitted by the @janhq/core package and handles new message requests.
  */
-export default class JanInferenceNitroExtension implements InferenceExtension {
-  private static readonly _homeDir = "file://engines";
-  private static readonly _settingsDir = "file://settings";
-  private static readonly _engineMetadataFileName = "nitro.json";
+export default class JanInferenceNitroExtension extends LocalOAIEngine {
+  nodeModule: string = NODE
+  provider: string = 'nitro'
 
-  private static _currentModel: Model;
-
-  private static _engineSettings: EngineSettings = {
-    ctx_len: 2048,
-    ngl: 100,
-    cpu_threads: 1,
-    cont_batching: false,
-    embedding: false,
-  };
-
-  controller = new AbortController();
-  isCancelled = false;
   /**
-   * Returns the type of the extension.
-   * @returns {ExtensionType} The type of the extension.
+   * Checking the health for Nitro's process each 5 secs.
    */
-  type(): ExtensionType {
-    return ExtensionType.Inference;
-  }
+  private static readonly _intervalHealthCheck = 5 * 1000
+
+  /**
+   * The interval id for the health check. Used to stop the health check.
+   */
+  private getNitroProcessHealthIntervalId: NodeJS.Timeout | undefined = undefined
+
+  /**
+   * Tracking the current state of nitro process.
+   */
+  private nitroProcessInfo: any = undefined
+
+  /**
+   * The URL for making inference requests.
+   */
+  inferenceUrl = ''
 
   /**
    * Subscribes to events emitted by the @janhq/core package.
    */
   async onLoad() {
-    if (!(await fs.existsSync(JanInferenceNitroExtension._homeDir))) {
-      await fs
-        .mkdirSync(JanInferenceNitroExtension._homeDir)
-        .catch((err) => console.debug(err));
+    this.inferenceUrl = INFERENCE_URL
+
+    // If the extension is running in the browser, use the base API URL from the core package.
+    if (!('electronAPI' in window)) {
+      this.inferenceUrl = `${window.core?.api?.baseApiUrl}/v1/chat/completions`
     }
 
-    if (!(await fs.existsSync(JanInferenceNitroExtension._settingsDir)))
-      await fs.mkdirSync(JanInferenceNitroExtension._settingsDir);
-    this.writeDefaultEngineSettings();
+    this.getNitroProcessHealthIntervalId = setInterval(
+      () => this.periodicallyGetNitroHealth(),
+      JanInferenceNitroExtension._intervalHealthCheck
+    )
+    const models = MODELS as unknown as Model[]
+    this.registerModels(models)
+    super.onLoad()
 
-    // Events subscription
-    events.on(EventName.OnMessageSent, (data) =>
-      JanInferenceNitroExtension.handleMessageRequest(data, this)
-    );
-
-    events.on(EventName.OnModelInit, (model: Model) => {
-      JanInferenceNitroExtension.handleModelInit(model);
-    });
-
-    events.on(EventName.OnModelStop, (model: Model) => {
-      JanInferenceNitroExtension.handleModelStop(model);
-    });
-
-    events.on(EventName.OnInferenceStopped, () => {
-      JanInferenceNitroExtension.handleInferenceStopped(this);
-    });
-
-    // Attempt to fetch nvidia info
-    await executeOnMain(MODULE, "updateNvidiaInfo", {});
+    executeOnMain(NODE, 'addAdditionalDependencies', {
+      name: this.name,
+      version: this.version,
+    })
   }
 
   /**
-   * Stops the model inference.
+   * Periodically check for nitro process's health.
    */
-  onUnload(): void {}
+  private async periodicallyGetNitroHealth(): Promise<void> {
+    const health = await executeOnMain(NODE, 'getCurrentNitroProcessInfo')
 
-  private async writeDefaultEngineSettings() {
-    try {
-      const engineFile = join(
-        JanInferenceNitroExtension._homeDir,
-        JanInferenceNitroExtension._engineMetadataFileName
-      );
-      if (await fs.existsSync(engineFile)) {
-        const engine = await fs.readFileSync(engineFile, "utf-8");
-        JanInferenceNitroExtension._engineSettings =
-          typeof engine === "object" ? engine : JSON.parse(engine);
-      } else {
-        await fs.writeFileSync(
-          engineFile,
-          JSON.stringify(JanInferenceNitroExtension._engineSettings, null, 2)
-        );
-      }
-    } catch (err) {
-      console.error(err);
+    const isRunning = this.nitroProcessInfo?.isRunning ?? false
+    if (isRunning && health.isRunning === false) {
+      console.debug('Nitro process is stopped')
+      events.emit(ModelEvent.OnModelStopped, {})
     }
+    this.nitroProcessInfo = health
   }
 
-  private static async handleModelInit(model: Model) {
-    if (model.engine !== "nitro") {
-      return;
-    }
-    const modelFullPath = await joinPath(["models", model.id]);
-
-    const nitroInitResult = await executeOnMain(MODULE, "initModel", {
-      modelFullPath: modelFullPath,
-      model: model,
-    });
-
-    if (nitroInitResult.error === null) {
-      events.emit(EventName.OnModelFail, model);
-    } else {
-      JanInferenceNitroExtension._currentModel = model;
-      events.emit(EventName.OnModelReady, model);
-    }
+  override loadModel(model: Model): Promise<void> {
+    if (model.engine !== this.provider) return Promise.resolve()
+    this.getNitroProcessHealthIntervalId = setInterval(
+      () => this.periodicallyGetNitroHealth(),
+      JanInferenceNitroExtension._intervalHealthCheck
+    )
+    return super.loadModel(model)
   }
 
-  private static async handleModelStop(model: Model) {
-    if (model.engine !== "nitro") {
-      return;
-    } else {
-      await executeOnMain(MODULE, "stopModel");
-      events.emit(EventName.OnModelStopped, model);
+  override async unloadModel(model?: Model): Promise<void> {
+    if (model?.engine && model.engine !== this.provider) return
+
+    // stop the periocally health check
+    if (this.getNitroProcessHealthIntervalId) {
+      clearInterval(this.getNitroProcessHealthIntervalId)
+      this.getNitroProcessHealthIntervalId = undefined
     }
+    return super.unloadModel(model)
   }
 
-  private static async handleInferenceStopped(
-    instance: JanInferenceNitroExtension
-  ) {
-    instance.isCancelled = true;
-    instance.controller?.abort();
-  }
+  override async install(): Promise<void> {
+    const info = await systemInformation()
 
-  /**
-   * Makes a single response inference request.
-   * @param {MessageRequest} data - The data for the inference request.
-   * @returns {Promise<any>} A promise that resolves with the inference response.
-   */
-  async inference(data: MessageRequest): Promise<ThreadMessage> {
-    const timestamp = Date.now();
-    const message: ThreadMessage = {
-      thread_id: data.threadId,
-      created: timestamp,
-      updated: timestamp,
-      status: MessageStatus.Ready,
-      id: "",
-      role: ChatCompletionRole.Assistant,
-      object: "thread.message",
-      content: [],
-    };
+    const platform = info.osInfo?.platform === 'win32' ? 'windows' : 'linux'
+    const downloadUrl = CUDA_DOWNLOAD_URL
 
-    return new Promise(async (resolve, reject) => {
-      requestInference(
-        data.messages ?? [],
-        JanInferenceNitroExtension._currentModel
-      ).subscribe({
-        next: (_content) => {},
-        complete: async () => {
-          resolve(message);
-        },
-        error: async (err) => {
-          reject(err);
-        },
-      });
-    });
-  }
+    const url = downloadUrl
+      .replace('<version>', info.gpuSetting?.cuda?.version ?? '12.4')
+      .replace('<platform>', platform)
 
-  /**
-   * Handles a new message request by making an inference request and emitting events.
-   * Function registered in event manager, should be static to avoid binding issues.
-   * Pass instance as a reference.
-   * @param {MessageRequest} data - The data for the new message request.
-   */
-  private static async handleMessageRequest(
-    data: MessageRequest,
-    instance: JanInferenceNitroExtension
-  ) {
-    if (data.model.engine !== "nitro") {
-      return;
+    console.debug('Downloading Cuda Toolkit Dependency: ', url)
+
+    const janDataFolderPath = await getJanDataFolderPath()
+
+    const executableFolderPath = await joinPath([
+      janDataFolderPath,
+      'engines',
+      this.name ?? 'cortex-cpp',
+      this.version ?? '1.0.0',
+    ])
+
+    if (!(await fs.existsSync(executableFolderPath))) {
+      await fs.mkdir(executableFolderPath)
     }
-    const timestamp = Date.now();
-    const message: ThreadMessage = {
-      id: ulid(),
-      thread_id: data.threadId,
-      assistant_id: data.assistantId,
-      role: ChatCompletionRole.Assistant,
-      content: [],
-      status: MessageStatus.Pending,
-      created: timestamp,
-      updated: timestamp,
-      object: "thread.message",
-    };
-    events.emit(EventName.OnMessageResponse, message);
 
-    instance.isCancelled = false;
-    instance.controller = new AbortController();
+    const tarball = await baseName(url)
+    const tarballFullPath = await joinPath([executableFolderPath, tarball])
 
-    requestInference(
-      data.messages ?? [],
-      { ...JanInferenceNitroExtension._currentModel, ...data.model },
-      instance.controller
-    ).subscribe({
-      next: (content) => {
-        const messageContent: ThreadContent = {
-          type: ContentType.Text,
-          text: {
-            value: content.trim(),
-            annotations: [],
-          },
-        };
-        message.content = [messageContent];
-        events.emit(EventName.OnMessageUpdate, message);
-      },
-      complete: async () => {
-        message.status = message.content.length
-          ? MessageStatus.Ready
-          : MessageStatus.Error;
-        events.emit(EventName.OnMessageUpdate, message);
-      },
-      error: async (err) => {
-        if (instance.isCancelled || message.content.length) {
-          message.status = MessageStatus.Stopped;
-          events.emit(EventName.OnMessageUpdate, message);
-          return;
-        }
-        message.status = MessageStatus.Error;
-        events.emit(EventName.OnMessageUpdate, message);
-      },
-    });
+    const downloadRequest: DownloadRequest = {
+      url,
+      localPath: tarballFullPath,
+      extensionId: this.name,
+      downloadType: 'extension',
+    }
+    downloadFile(downloadRequest)
+
+    const onFileDownloadSuccess = async (state: DownloadState) => {
+      console.log(state)
+      // if other download, ignore
+      if (state.fileName !== tarball) return
+      events.off(DownloadEvent.onFileDownloadSuccess, onFileDownloadSuccess)
+      await executeOnMain(
+        NODE,
+        'decompressRunner',
+        tarballFullPath,
+        executableFolderPath
+      )
+      events.emit(DownloadEvent.onFileUnzipSuccess, state)
+    }
+    events.on(DownloadEvent.onFileDownloadSuccess, onFileDownloadSuccess)
+  }
+
+  override async installationState(): Promise<InstallationState> {
+    const info = await systemInformation()
+    if (
+      info.gpuSetting?.run_mode === 'gpu' &&
+      !info.gpuSetting?.vulkan &&
+      info.osInfo &&
+      info.osInfo.platform !== 'darwin' &&
+      !info.gpuSetting?.cuda?.exist
+    ) {
+      const janDataFolderPath = await getJanDataFolderPath()
+
+      const executableFolderPath = await joinPath([
+        janDataFolderPath,
+        'engines',
+        this.name ?? 'cortex-cpp',
+        this.version ?? '1.0.0',
+      ])
+
+      if (!(await fs.existsSync(executableFolderPath))) return 'NotInstalled'
+      return 'Installed'
+    }
+    return 'NotRequired'
   }
 }

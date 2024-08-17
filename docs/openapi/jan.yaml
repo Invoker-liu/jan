@@ -14,7 +14,7 @@ license:
   name: AGPLv3
   url: https://github.com/janhq/nitro/blob/main/LICENSE
 servers:
-  - url: http://localhost:1337/v1/
+  - url: /v1
 tags:
   - name: Models
     description: List and describe the various models available in the API.
@@ -58,7 +58,7 @@ paths:
             schema:
               $ref: specs/chat.yaml#/components/schemas/ChatCompletionRequest
       responses:
-        "200":
+        '200':
           description: OK
           content:
             application/json:
@@ -67,21 +67,134 @@ paths:
       x-codeSamples:
         - lang: cURL
           source: |
-            curl http://localhost:1337/v1/chat/completions \
-              -H "Content-Type: application/json" \
+            curl -X 'POST' \
+              'http://localhost:1337/v1/chat/completions' \
+              -H 'accept: application/json' \
+              -H 'Content-Type: application/json' \
               -d '{
-                "model": "tinyllama-1.1b",
                 "messages": [
                   {
-                    "role": "system",
-                    "content": "You are a helpful assistant."
+                    "content": "You are a helpful assistant.",
+                    "role": "system"
                   },
                   {
-                    "role": "user",
-                    "content": "Hello!"
+                    "content": "Hello!",
+                    "role": "user"
                   }
-                ]
+                ],
+                "model": "tinyllama-1.1b",
+                "stream": true,
+                "max_tokens": 2048,
+                "stop": [
+                  "hello"
+                ],
+                "frequency_penalty": 0,
+                "presence_penalty": 0,
+                "temperature": 0.7,
+                "top_p": 0.95
               }'
+        - lang: JavaScript
+          source: |-
+            const data = {
+              messages: [
+                {
+                  content: 'You are a helpful assistant.',
+                  role: 'system'
+                },
+                {
+                  content: 'Hello!',
+                  role: 'user'
+                }
+              ],
+              model: 'tinyllama-1.1b',
+              stream: true,
+              max_tokens: 2048,
+              stop: ['hello'],
+              frequency_penalty: 0,
+              presence_penalty: 0,
+              temperature: 0.7,
+              top_p: 0.95
+            };
+
+            fetch('http://localhost:1337/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+              },
+              body: JSON.stringify(data)
+            })
+              .then(response => response.json())
+              .then(data => console.log(data));
+        - lang: Node.js
+          source: |-
+            const fetch = require('node-fetch');
+
+            const data = {
+              messages: [
+                {
+                  content: 'You are a helpful assistant.',
+                  role: 'system'
+                },
+                {
+                  content: 'Hello!',
+                  role: 'user'
+                }
+              ],
+              model: 'tinyllama-1.1b',
+              stream: true,
+              max_tokens: 2048,
+              stop: ['hello'],
+              frequency_penalty: 0,
+              presence_penalty: 0,
+              temperature: 0.7,
+              top_p: 0.95
+            };
+
+            fetch('http://localhost:1337/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+              },
+              body: JSON.stringify(data)
+            })
+              .then(response => response.json())
+              .then(data => console.log(data));
+        - lang: Python
+          source: >-
+            import requests
+
+            import json
+
+
+            data = {
+              "messages": [
+                {
+                  "content": "You are a helpful assistant.",
+                  "role": "system"
+                },
+                {
+                  "content": "Hello!",
+                  "role": "user"
+                }
+              ],
+              "model": "tinyllama-1.1b",
+              "stream": true,
+              "max_tokens": 2048,
+              "stop": [
+                "hello"
+              ],
+              "frequency_penalty": 0,
+              "presence_penalty": 0,
+              "temperature": 0.7,
+              "top_p": 0.95
+            }
+
+
+            response = requests.post('http://localhost:1337/v1/chat/completions', json=data)
+
+            print(response.json())
   /models:
     get:
       operationId: listModels
@@ -94,7 +207,7 @@ paths:
         = "https://platform.openai.com/docs/api-reference/models/list">
         Equivalent to OpenAI's list model. </a>
       responses:
-        "200":
+        '200':
           description: OK
           content:
             application/json:
@@ -102,17 +215,57 @@ paths:
                 $ref: specs/models.yaml#/components/schemas/ListModelsResponse
       x-codeSamples:
         - lang: cURL
-          source: |
-            curl http://localhost:1337/v1/models
-    post:
+          source: |-
+            curl -X 'GET' \
+              'http://localhost:1337/v1/models' \
+              -H 'accept: application/json'
+        - lang: JavaScript
+          source: |-
+            const response = await fetch('http://localhost:1337/v1/models', {
+              method: 'GET',
+              headers: {Accept: 'application/json'}
+            });
+            const data = await response.json();
+        - lang: Node.js
+          source: |-
+            const fetch = require('node-fetch');
+
+            const url = 'http://localhost:1337/v1/models';
+            const options = {
+              method: 'GET',
+              headers: { Accept: 'application/json' }
+            };
+
+            fetch(url, options)
+              .then(res => res.json())
+              .then(json => console.log(json));
+        - lang: Python
+          source: |-
+            import requests
+
+            url = 'http://localhost:1337/v1/models'
+            headers = {'Accept': 'application/json'}
+            response = requests.get(url, headers=headers)
+            data = response.json()
+  '/models/download/{model_id}':
+    get:
       operationId: downloadModel
       tags:
         - Models
-      summary: Download model
+      summary: Download a specific model.
       description: |
         Download a model.
+      parameters:
+        - in: path
+          name: model_id
+          required: true
+          schema:
+            type: string
+            example: mistral-ins-7b-q4
+          description: |
+            The ID of the model to use for this request.
       responses:
-        "200":
+        '200':
           description: OK
           content:
             application/json:
@@ -120,9 +273,39 @@ paths:
                 $ref: specs/models.yaml#/components/schemas/DownloadModelResponse
       x-codeSamples:
         - lang: cURL
-          source: |
-            curl -X POST http://localhost:1337/v1/models
-  "/models/{model_id}":
+          source: |-
+            curl -X 'GET' \  
+              'http://localhost:1337/v1/models/download/{model_id}' \  
+              -H 'accept: application/json'
+        - lang: JavaScript
+          source: >-
+            const response = await
+            fetch('http://localhost:1337/v1/models/download/{model_id}', {
+              method: 'GET',
+              headers: {accept: 'application/json'}
+            });
+
+
+            const data = await response.json();
+        - lang: Node.js
+          source: |-
+            const fetch = require('node-fetch');
+
+            fetch('http://localhost:1337/v1/models/download/{model_id}', {
+              method: 'GET',
+              headers: {accept: 'application/json'}
+            })
+            .then(res => res.json())
+            .then(data => console.log(data));
+        - lang: Python
+          source: >-
+            import requests
+
+
+            response = requests.get('http://localhost:1337/v1/models/download/{model_id}', headers={'accept': 'application/json'})
+
+            data = response.json()
+  '/models/{model_id}':
     get:
       operationId: retrieveModel
       tags:
@@ -139,11 +322,11 @@ paths:
           required: true
           schema:
             type: string
-            example: zephyr-7b
+            example: mistral-ins-7b-q4
           description: |
             The ID of the model to use for this request.
       responses:
-        "200":
+        '200':
           description: OK
           content:
             application/json:
@@ -151,8 +334,45 @@ paths:
                 $ref: specs/models.yaml#/components/schemas/GetModelResponse
       x-codeSamples:
         - lang: cURL
-          source: |
-            curl http://localhost:1337/v1/models/{model_id}
+          source: |-
+            curl -X 'GET' \  
+              'http://localhost:1337/v1/models/{model_id}' \  
+              -H 'accept: application/json'
+        - lang: JavaScript
+          source: |-
+            const fetch = require('node-fetch');
+
+            const modelId = 'mistral-ins-7b-q4';
+
+            fetch(`http://localhost:1337/v1/models/${modelId}`, {
+              method: 'GET',
+              headers: {'accept': 'application/json'}
+            })
+            .then(res => res.json())
+            .then(json => console.log(json));
+        - lang: Node.js
+          source: |-
+            const fetch = require('node-fetch');
+
+            const modelId = 'mistral-ins-7b-q4';
+
+            fetch(`http://localhost:1337/v1/models/${modelId}`, {
+              method: 'GET',
+              headers: {'accept': 'application/json'}
+            })
+            .then(res => res.json())
+            .then(json => console.log(json));
+        - lang: Python
+          source: >-
+            import requests
+
+
+            model_id = 'mistral-ins-7b-q4'
+
+
+            response = requests.get(f'http://localhost:1337/v1/models/{model_id}', headers={'accept': 'application/json'})
+
+            print(response.json())
     delete:
       operationId: deleteModel
       tags:
@@ -164,15 +384,15 @@ paths:
         Equivalent to OpenAI's delete model. </a>
       parameters:
         - in: path
-          name: model
+          name: model_id
           required: true
           schema:
             type: string
-            example: zephyr-7b
+            example: mistral-ins-7b-q4
           description: |
-            The model to delete
+            The model id to delete
       responses:
-        "200":
+        '200':
           description: OK
           content:
             application/json:
@@ -180,63 +400,43 @@ paths:
                 $ref: specs/models.yaml#/components/schemas/DeleteModelResponse
       x-codeSamples:
         - lang: cURL
-          source: |
-            curl -X DELETE http://localhost:1337/v1/models/{model_id}
-  "/models/{model_id}/start":
-    put:
-      operationId: startModel
-      tags:
-        - Models
-      summary: Start model
-      description: |
-        Starts an imported model. Loads the model into V/RAM.
-      parameters:
-        - in: path
-          name: model
-          required: true
-          schema:
-            type: string
-            example: zephyr-7b
-          description: |
-            The ID of the model to use for this request
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: specs/models.yaml#/components/schemas/StartModelResponse
-      x-codeSamples:
-        - lang: cURL
-          source: |
-            curl -X PUT http://localhost:1337/v1/models/{model_id}/start
-  "/models/{model_id}/stop":
-    put:
-      operationId: stopModel
-      tags:
-        - Models
-      summary: Stop model
-      description: |
-        Stop an imported model.
-      parameters:
-        - in: path
-          name: model
-          required: true
-          schema:
-            type: string
-            example: zephyr-7b
-          description: The ID of the model to use for this request
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: specs/models.yaml#/components/schemas/StopModelResponse
-      x-codeSamples:
-        - lang: cURL
-          source: |
-            curl -X PUT http://localhost:1337/v1/models/{model_id}/stop
+          source: |-
+            curl -X 'DELETE' \
+              'http://localhost:1337/v1/models/{model_id}' \
+              -H 'accept: application/json'
+        - lang: JavaScript
+          source: |-
+            const fetch = require('node-fetch');
+
+            const modelId = 'mistral-ins-7b-q4';
+
+            fetch(`http://localhost:1337/v1/models/${modelId}`, {
+              method: 'DELETE',
+              headers: { 'accept': 'application/json' }
+            })
+              .then(res => res.json())
+              .then(json => console.log(json));
+        - lang: Node.js
+          source: |-
+            const fetch = require('node-fetch');
+
+            const modelId = 'mistral-ins-7b-q4';
+
+            fetch(`http://localhost:1337/v1/models/${modelId}`, {
+              method: 'DELETE',
+              headers: { 'accept': 'application/json' }
+            })
+              .then(res => res.json())
+              .then(json => console.log(json));
+        - lang: Python
+          source: >-
+            import requests
+
+
+            model_id = 'mistral-ins-7b-q4'
+
+
+            response = requests.delete(f'http://localhost:1337/v1/models/{model_id}', headers={'accept': 'application/json'})
   /threads:
     post:
       operationId: createThread
@@ -252,15 +452,9 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                messages:
-                  type: array
-                  description: Initial set of messages for the thread.
-                  items:
-                    $ref: specs/threads.yaml#/components/schemas/ThreadMessageObject
+              $ref: specs/threads.yaml#/components/schemas/CreateThreadObject
       responses:
-        "200":
+        '200':
           description: Thread created successfully
           content:
             application/json:
@@ -269,8 +463,8 @@ paths:
       x-codeSamples:
         - lang: cURL
           source: |
-            curl -X POST http://localhost:1337/v1/threads \
-              -H "Content-Type: application/json" \
+            curl -X POST http://localhost:1337/v1/threads \  
+              -H "Content-Type: application/json" \  
               -d '{
                   "messages": [{
                       "role": "user",
@@ -281,6 +475,73 @@ paths:
                       "content": "How does AI work? Explain it in simple terms."
                   }]
               }'
+        - lang: JavaScript
+          source: |-
+            const fetch = require('node-fetch');
+
+            fetch('http://localhost:1337/v1/threads', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                messages: [
+                  {
+                    role: 'user',
+                    content: 'Hello, what is AI?',
+                    file_ids: ['file-abc123']
+                  },
+                  {
+                    role: 'user',
+                    content: 'How does AI work? Explain it in simple terms.'
+                  }
+                ]
+              })
+            });
+        - lang: Node.js
+          source: |-
+            const fetch = require('node-fetch');
+
+            fetch('http://localhost:1337/v1/threads', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                messages: [
+                  {
+                    role: 'user',
+                    content: 'Hello, what is AI?',
+                    file_ids: ['file-abc123']
+                  },
+                  {
+                    role: 'user',
+                    content: 'How does AI work? Explain it in simple terms.'
+                  }
+                ]
+              })
+            });
+        - lang: Python
+          source: |-
+            import requests
+
+            url = 'http://localhost:1337/v1/threads'
+            payload = {
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': 'Hello, what is AI?',
+                  'file_ids': ['file-abc123']
+                },
+                {
+                  'role': 'user',
+                  'content': 'How does AI work? Explain it in simple terms.'
+                }
+              ]
+            }
+
+            response = requests.post(url, json=payload)
+            print(response.text)
     get:
       operationId: listThreads
       tags:
@@ -289,7 +550,7 @@ paths:
       description: |
         Retrieves a list of all threads available in the system.
       responses:
-        "200":
+        '200':
           description: List of threads retrieved successfully
           content:
             application/json:
@@ -314,10 +575,37 @@ paths:
                     metadata: {}
       x-codeSamples:
         - lang: cURL
-          source: |
-            curl http://localhost:1337/v1/threads \
-              -H "Content-Type: application/json" \
-  "/threads/{thread_id}":
+          source: |-
+            curl http://localhost:1337/v1/threads \ 
+             -H "Content-Type: application/json"
+        - lang: JavaScript
+          source: |-
+            const fetch = require('node-fetch'); 
+
+            fetch('http://localhost:1337/v1/threads', { 
+             method: 'GET', 
+             headers: {'Content-Type': 'application/json'} 
+            }).then(res => res.json()) 
+            .then(json => console.log(json));
+        - lang: Node.js
+          source: |-
+            const fetch = require('node-fetch');
+
+            fetch('http://localhost:1337/v1/threads', {
+             method: 'GET',
+             headers: {'Content-Type': 'application/json'}
+            }).then(res => res.json())
+            .then(json => console.log(json));
+        - lang: Python
+          source: |-
+            import requests
+
+            url = 'http://localhost:1337/v1/threads'
+            headers = {'Content-Type': 'application/json'}
+
+            response = requests.get(url, headers=headers)
+            print(response.json())
+  '/threads/{thread_id}':
     get:
       operationId: getThread
       tags:
@@ -334,11 +622,10 @@ paths:
           required: true
           schema:
             type: string
-            example: thread_abc123
           description: |
             The ID of the thread to retrieve.
       responses:
-        "200":
+        '200':
           description: Thread details retrieved successfully
           content:
             application/json:
@@ -348,7 +635,7 @@ paths:
         - lang: cURL
           source: |
             curl http://localhost:1337/v1/threads/{thread_id}
-    post:
+    patch:
       operationId: modifyThread
       tags:
         - Threads
@@ -363,23 +650,22 @@ paths:
           required: true
           schema:
             type: string
-            example: thread_abc123
           description: |
             The ID of the thread to be modified.
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
             schema:
               type: object
               properties:
-                messages:
-                  type: array
-                  description: Set of messages to update in the thread.
+                title:
+                  type: string
+                  description: Set the title of the thread
                   items:
                     $ref: specs/threads.yaml#/components/schemas/ThreadMessageObject
       responses:
-        "200":
+        '200':
           description: Thread modified successfully
           content:
             application/json:
@@ -415,11 +701,10 @@ paths:
           required: true
           schema:
             type: string
-            example: thread_abc123
           description: |
             The ID of the thread to be deleted.
       responses:
-        "200":
+        '200':
           description: Thread deleted successfully
           content:
             application/json:
@@ -429,70 +714,7 @@ paths:
         - lang: cURL
           source: |
             curl -X DELETE http://localhost:1337/v1/threads/{thread_id}
-  "/threads/{thread_id}/assistants":
-    get:
-      operationId: getThreadAssistants
-      tags:
-        - Threads
-      summary: Get Thread.Assistants
-      description: |
-        Can achieve this goal by calling Get thread API.
-      parameters:
-        - in: path
-          name: thread_id
-          required: true
-          schema:
-            type: string
-            example: thread_abc123
-          description: The ID of the thread to retrieve.
-      responses:
-        "200":
-          description: Thread details retrieved successfully
-          content:
-            application/json:
-              schema:
-                $ref: specs/threads.yaml#/components/schemas/GetThreadResponse
-      x-codeSamples:
-        - lang: cURL
-          source: |
-            curl http://localhost:1337/v1/threads/{thread_id}/assistants
-  "/threads/{thread_id}/assistants/{assistants_id}":
-    post:
-      operationId: postThreadAssistants
-      tags:
-        - Threads
-      summary: Modify Thread.Assistants
-      description: >
-        Can achieve this goal by calling Modify Assistant API with
-        thread.assistant[].
-  "/threads/{thread_id}/":
-    get:
-      operationId: listThreadMessage
-      tags:
-        - Threads
-      summary: List Thread.Messages
-      description: |
-        Can achieve this goal by calling Get Thread API.
-      parameters:
-        - in: path
-          name: thread_id
-          required: true
-          schema:
-            type: string
-            example: thread_abc123
-          description: The ID of the thread to retrieve.
-      responses:
-        "200":
-          description: Thread details retrieved successfully
-          content:
-            application/json:
-              schema:
-                $ref: specs/threads.yaml#/components/schemas/GetThreadResponse
-      x-codeSamples:
-        - lang: cURL
-          source: |
-            curl http://localhost:1337/v1/threads/{thread_id}
-  /assistants/:
+  /assistants:
     get:
       operationId: listAssistants
       tags:
@@ -503,8 +725,8 @@ paths:
         "https://platform.openai.com/docs/api-reference/assistants/listAssistants">
         Equivalent to OpenAI's list assistants. </a>
       responses:
-        "200":
-          description: List of threads retrieved successfully
+        '200':
+          description: List of assistants retrieved successfully
           content:
             application/json:
               schema:
@@ -538,58 +760,38 @@ paths:
                       in: []
                       out: []
                     metadata: {}
-        responses: null
       x-codeSamples:
         - lang: cURL
-          source: |
+          source: |-
             curl http://localhost:1337/v1/assistants \
-              -H "Content-Type: application/json" \
-    post:
-      operationId: createAssistant
-      tags:
-        - Assistants
-      summary: Create assistant
-      description: >
-        Create an assistant with a model and instructions. <a href =
-        "https://platform.openai.com/docs/api-reference/assistants/createAssistant">
-        Equivalent to OpenAI's create assistants. </a>
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                models:
-                  type: array
-                  description: List of models associated with the assistant. Jan-specific
-                    property.
-                  items:
-                    type: object
-                    properties:
-                      model_id:
-                        type: string
-                        example: model_0
-      responses:
-        "200":
-          description: null
-          content:
-            application/json:
-              schema:
-                $ref: specs/assistants.yaml#/components/schemas/CreateAssistantResponse
-      x-codeSamples:
-        - lang: cURL
-          source: |
-            curl http://localhost:1337/v1/assistants \
-              -H "Content-Type: application/json" \
-              -d '{
-                  "models": [
-                      {
-                          "model_id": "model_0"
-                      }
-                  ]
-              }'
-  "/assistants/{assistant_id}":
+              -H "Content-Type: application/json"
+        - lang: JavaScript
+          source: |-
+            fetch('http://localhost:1337/v1/assistants', {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            })
+        - lang: Node.js
+          source: |-
+            const fetch = require('node-fetch');
+
+            fetch('http://localhost:1337/v1/assistants', {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            })
+        - lang: Python
+          source: |-
+            import requests
+
+            url = 'http://localhost:1337/v1/assistants'
+            headers = {'Content-Type': 'application/json'}
+
+            response = requests.get(url, headers=headers)
+  '/assistants/{assistant_id}':
     get:
       operationId: getAssistant
       tags:
@@ -605,11 +807,11 @@ paths:
           required: true
           schema:
             type: string
-            example: asst_abc123
+            example: jan
           description: |
             The ID of the assistant to retrieve.
       responses:
-        "200":
+        '200':
           description: null
           content:
             application/json:
@@ -617,103 +819,43 @@ paths:
                 $ref: specs/assistants.yaml#/components/schemas/RetrieveAssistantResponse
       x-codeSamples:
         - lang: cURL
-          source: |
+          source: |-
             curl http://localhost:1337/v1/assistants/{assistant_id} \
-              -H "Content-Type: application/json" \
-    post:
-      operationId: modifyAssistant
-      tags:
-        - Assistants
-      summary: Modify assistant
-      description: >
-        Modifies an assistant. <a href =
-        "https://platform.openai.com/docs/api-reference/assistants/modifyAssistant">
-        Equivalent to OpenAI's modify assistant. </a>
-      parameters:
-        - in: path
-          name: assistant_id
-          required: true
-          schema:
-            type: string
-            example: asst_abc123
-          description: |
-            The ID of the assistant to modify.
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                models:
-                  type: array
-                  description: List of models associated with the assistant. Jan-specific
-                    property.
-                  items:
-                    type: object
-                    properties:
-                      model_id:
-                        type: string
-                        example: model_0
-                name:
-                  type: string
-                  description: Name of the assistant.
-                  example: Physics Tutor
-                instructions:
-                  type: string
-                  description: A system prompt for the assistant.
-                  example: Be concise!
-      responses:
-        "200":
-          description: null
-          content:
-            application/json:
-              schema:
-                $ref: specs/assistants.yaml#/components/schemas/ModifyAssistantResponse
-      x-codeSamples:
-        - lang: cURL
-          source: |
-            curl http://localhost:1337/v1/assistants/{assistant_id} \
-              -H "Content-Type: application/json" \
-              -d '{
-                  "models": [
-                      {
-                          "model_id": "model_0"
-                      }
-                  ],
-                  "name": "Physics Tutor",
-                  "instructions": "Be concise!",
-                }'
-    delete:
-      operationId: deleteAssistant
-      tags:
-        - Assistants
-      summary: Delete assistant
-      description: >
-        Delete an assistant. <a href =
-        "https://platform.openai.com/docs/api-reference/assistants/deleteAssistant">
-        Equivalent to OpenAI's delete assistant. </a>
-      parameters:
-        - in: path
-          name: assistant_id
-          required: true
-          schema:
-            type: string
-            example: asst_abc123
-          description: |
-            The ID of the assistant to delete.
-      responses:
-        "200":
-          description: Deletion status
-          content:
-            application/json:
-              schema:
-                $ref: specs/assistants.yaml#/components/schemas/DeleteAssistantResponse
-      x-codeSamples:
-        - lang: cURL
-          source: |
-            curl -X DELETE http://localhost:1337/v1/assistants/{assistant_id}
-  "/threads/{thread_id}/messages":
+              -H "Content-Type: application/json"
+        - lang: JavaScript
+          source: |-
+            const fetch = require('node-fetch');
+
+            let assistantId = 'abc123';
+
+            fetch(`http://localhost:1337/v1/assistants/${assistantId}`, {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            })
+        - lang: Node.js
+          source: |-
+            const fetch = require('node-fetch');
+
+            let assistantId = 'abc123';
+
+            fetch(`http://localhost:1337/v1/assistants/${assistantId}`, {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            })
+        - lang: Python
+          source: >-
+            import requests
+
+
+            assistant_id = 'abc123'
+
+
+            response = requests.get(f'http://localhost:1337/v1/assistants/{assistant_id}', headers={'Content-Type': 'application/json'})
+  '/threads/{thread_id}/messages':
     get:
       operationId: listMessages
       tags:
@@ -729,11 +871,10 @@ paths:
           required: true
           schema:
             type: string
-            example: thread_abc123
           description: |
             The ID of the thread from which to retrieve messages.
       responses:
-        "200":
+        '200':
           description: List of messages retrieved successfully
           content:
             application/json:
@@ -759,7 +900,6 @@ paths:
           required: true
           schema:
             type: string
-            example: thread_abc123
           description: |
             The ID of the thread to which the message will be posted.
       requestBody:
@@ -786,7 +926,7 @@ paths:
                 - role
                 - content
       responses:
-        "200":
+        '200':
           description: Message created successfully
           content:
             application/json:
@@ -801,7 +941,7 @@ paths:
                 "role": "user",
                 "content": "How does AI work? Explain it in simple terms."
               }'
-  "/threads/{thread_id}/messages/{message_id}":
+  '/threads/{thread_id}/messages/{message_id}':
     get:
       operationId: retrieveMessage
       tags:
@@ -818,7 +958,6 @@ paths:
           required: true
           schema:
             type: string
-            example: thread_abc123
           description: |
             The ID of the thread containing the message.
         - in: path
@@ -826,11 +965,10 @@ paths:
           required: true
           schema:
             type: string
-            example: msg_abc123
           description: |
             The ID of the message to retrieve.
       responses:
-        "200":
+        '200':
           description: OK
           content:
             application/json:
@@ -840,98 +978,6 @@ paths:
         - lang: cURL
           source: >
             curl http://localhost:1337/v1/threads/{thread_id}/messages/{message_id}
-            \
-              -H "Content-Type: application/json"
-  "/threads/{thread_id}/messages/{message_id}/files":
-    get:
-      operationId: listMessageFiles
-      tags:
-        - Messages
-      summary: |
-        List message files
-      description: >
-        Returns a list of message files.  <a  href =
-        "https://platform.openai.com/docs/api-reference/messages/listMessageFiles">
-        Equivalent to OpenAI's list message files. </a>
-      parameters:
-        - in: path
-          name: thread_id
-          required: true
-          schema:
-            type: string
-            example: thread_abc123
-          description: |
-            The ID of the thread containing the message.
-        - in: path
-          name: message_id
-          required: true
-          schema:
-            type: string
-            example: msg_abc123
-          description: |
-            The ID of the message whose files are to be listed.
-      responses:
-        "200":
-          description: List of files retrieved successfully
-          content:
-            application/json:
-              schema:
-                $ref: specs/messages.yaml#/components/schemas/ListMessageFilesResponse
-      x-codeSamples:
-        - lang: cURL
-          source: >
-            curl
-            http://localhost:1337/v1/threads/{thread_id}/messages/{message_id}/files
-            \
-              -H "Content-Type: application/json"
-  "/threads/{thread_id}/messages/{message_id}/files/{file_id}":
-    get:
-      operationId: retrieveMessageFile
-      tags:
-        - Messages
-      summary: Retrieve message file
-      description: >
-        Retrieves a file associated with a specific message in a
-        thread.  <a  href =
-        "https://platform.openai.com/docs/api-reference/messages/getMessageFile">
-        Equivalent to OpenAI's retrieve message file. </a>
-      parameters:
-        - in: path
-          name: thread_id
-          required: true
-          schema:
-            type: string
-            example: thread_abc123
-          description: |
-            The ID of the thread containing the message.
-        - in: path
-          name: message_id
-          required: true
-          schema:
-            type: string
-            example: msg_abc123
-          description: |
-            The ID of the message associated with the file.
-        - in: path
-          name: file_id
-          required: true
-          schema:
-            type: string
-            example: file-abc123
-          description: |
-            The ID of the file to retrieve.
-      responses:
-        "200":
-          description: File retrieved successfully
-          content:
-            application/json:
-              schema:
-                $ref: specs/messages.yaml#/components/schemas/MessageFileObject
-      x-codeSamples:
-        - lang: cURL
-          source: >
-            curl
-            http://localhost:1337/v1/threads/{thread_id}/messages/{message_id}/files/{file_id}
             \
               -H "Content-Type: application/json"
 x-webhooks:

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { BaseExtension, ExtensionType } from '@janhq/core'
+import { AIEngine, BaseExtension, ExtensionTypeEnum } from '@janhq/core'
 
 import Extension from './Extension'
 
@@ -8,14 +8,27 @@ import Extension from './Extension'
  * Manages the registration and retrieval of extensions.
  */
 export class ExtensionManager {
+  // Registered extensions
   private extensions = new Map<string, BaseExtension>()
+
+  // Registered inference engines
+  private engines = new Map<string, AIEngine>()
 
   /**
    * Registers an extension.
    * @param extension - The extension to register.
    */
   register<T extends BaseExtension>(name: string, extension: T) {
-    this.extensions.set(extension.type() ?? name, extension)
+    // Register for naming use
+    this.extensions.set(name, extension)
+
+    // Register AI Engines
+    if ('provider' in extension && typeof extension.provider === 'string') {
+      this.engines.set(
+        extension.provider as unknown as string,
+        extension as unknown as AIEngine
+      )
+    }
   }
 
   /**
@@ -23,8 +36,35 @@ export class ExtensionManager {
    * @param type - The type of the extension to retrieve.
    * @returns The extension, if found.
    */
-  get<T extends BaseExtension>(type: ExtensionType): T | undefined {
-    return this.extensions.get(type) as T | undefined
+  get<T extends BaseExtension>(type: ExtensionTypeEnum): T | undefined {
+    return this.getAll().findLast((e) => e.type() === type) as T | undefined
+  }
+
+  /**
+   * Retrieves a extension by its type.
+   * @param type - The type of the extension to retrieve.
+   * @returns The extension, if found.
+   */
+  getByName(name: string): BaseExtension | undefined {
+    return this.extensions.get(name) as BaseExtension | undefined
+  }
+
+  /**
+   * Retrieves a extension by its type.
+   * @param type - The type of the extension to retrieve.
+   * @returns The extension, if found.
+   */
+  getAll(): BaseExtension[] {
+    return Array.from(this.extensions.values())
+  }
+
+  /**
+   * Retrieves a extension by its type.
+   * @param engine - The engine name to retrieve.
+   * @returns The extension, if found.
+   */
+  getEngine<T extends AIEngine>(engine: string): T | undefined {
+    return this.engines.get(engine) as T | undefined
   }
 
   /**
@@ -66,6 +106,7 @@ export class ExtensionManager {
         new Extension(
           ext.url,
           ext.name,
+          ext.productName,
           ext.active,
           ext.description,
           ext.version
@@ -83,7 +124,10 @@ export class ExtensionManager {
     // Import class
     const extensionUrl = window.electronAPI
       ? extension.url
-      : extension.url.replace('extension://', `${API_BASE_URL}/extensions/`)
+      : extension.url.replace(
+          'extension://',
+          `${window.core?.api?.baseApiUrl ?? ''}/extensions/`
+        )
     await import(/* webpackIgnore: true */ extensionUrl).then(
       (extensionClass) => {
         // Register class if it has a default export
@@ -92,8 +136,15 @@ export class ExtensionManager {
           extensionClass.default.prototype
         ) {
           this.register(
-            extension.name ?? extension.url,
-            new extensionClass.default()
+            extension.name,
+            new extensionClass.default(
+              extension.url,
+              extension.name,
+              extension.productName,
+              extension.active,
+              extension.description,
+              extension.version
+            )
           )
         }
       }

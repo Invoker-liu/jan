@@ -1,37 +1,32 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { fs, joinPath } from '@janhq/core'
-import { atom, useAtom } from 'jotai'
 
-export const isShowNotificationAtom = atom<boolean>(false)
+type NvidiaDriver = {
+  exist: boolean
+  version: string
+}
+
+export type AppSettings = {
+  run_mode: 'cpu' | 'gpu' | undefined
+  notify: boolean
+  gpus_in_use: string[]
+  vulkan: boolean
+  gpus: string[]
+  nvidia_driver: NvidiaDriver
+  cuda: NvidiaDriver
+}
 
 export const useSettings = () => {
-  const [isGPUModeEnabled, setIsGPUModeEnabled] = useState(false) // New state for GPU mode
-  const [showNotification, setShowNotification] = useAtom(
-    isShowNotificationAtom
-  )
+  const [settings, setSettings] = useState<AppSettings>()
 
   useEffect(() => {
-    setTimeout(() => validateSettings, 3000)
+    readSettings().then((settings) => setSettings(settings as AppSettings))
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const validateSettings = async () => {
-    readSettings().then((settings) => {
-      if (
-        settings &&
-        settings.notify &&
-        ((settings.nvidia_driver?.exist && !settings.cuda?.exist) ||
-          !settings.nvidia_driver?.exist)
-      ) {
-        setShowNotification(true)
-      }
-
-      // Check if run_mode is 'gpu' or 'cpu' and update state accordingly
-      setIsGPUModeEnabled(settings?.run_mode === 'gpu')
-    })
-  }
-
-  const readSettings = async () => {
+  const readSettings = useCallback(async () => {
     if (!window?.core?.api) {
       return
     }
@@ -41,27 +36,39 @@ export const useSettings = () => {
       return typeof settings === 'object' ? settings : JSON.parse(settings)
     }
     return {}
-  }
+  }, [])
+
   const saveSettings = async ({
     runMode,
     notify,
+    gpusInUse,
+    vulkan,
   }: {
     runMode?: string | undefined
     notify?: boolean | undefined
+    gpusInUse?: string[] | undefined
+    vulkan?: boolean | undefined
   }) => {
     const settingsFile = await joinPath(['file://settings', 'settings.json'])
     const settings = await readSettings()
     if (runMode != null) settings.run_mode = runMode
     if (notify != null) settings.notify = notify
+    if (gpusInUse != null) settings.gpus_in_use = gpusInUse
+    if (vulkan != null) {
+      settings.vulkan = vulkan
+      // GPU enabled, set run_mode to 'gpu'
+      if (settings.vulkan === true) {
+        settings.run_mode = 'gpu'
+      } else {
+        settings.run_mode = 'cpu'
+      }
+    }
     await fs.writeFileSync(settingsFile, JSON.stringify(settings))
   }
 
   return {
-    showNotification,
-    isGPUModeEnabled,
     readSettings,
     saveSettings,
-    setShowNotification,
-    validateSettings,
+    settings,
   }
 }

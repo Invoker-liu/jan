@@ -1,24 +1,36 @@
+import { useCallback } from 'react'
+
 import {
   Assistant,
   ConversationalExtension,
-  ExtensionType,
+  ExtensionTypeEnum,
   Thread,
   ThreadAssistantInfo,
   ThreadState,
   Model,
+  AssistantTool,
 } from '@janhq/core'
 import { atom, useAtomValue, useSetAtom } from 'jotai'
 
+import { fileUploadAtom } from '@/containers/Providers/Jotai'
+
 import { generateThreadId } from '@/utils/thread'
 
-import useDeleteThread from './useDeleteThread'
+import { useActiveModel } from './useActiveModel'
+import useRecommendedModel from './useRecommendedModel'
+
+import useSetActiveThread from './useSetActiveThread'
 
 import { extensionManager } from '@/extension'
+
+import { experimentalFeatureEnabledAtom } from '@/helpers/atoms/AppConfig.atom'
+import { selectedModelAtom } from '@/helpers/atoms/Model.atom'
 import {
   threadsAtom,
-  setActiveThreadIdAtom,
   threadStatesAtom,
   updateThreadAtom,
+  setThreadModelParamsAtom,
+  isGeneratingResponseAtom,
 } from '@/helpers/atoms/Thread.atom'
 
 const createNewThreadAtom = atom(null, (get, set, newThread: Thread) => {
@@ -29,7 +41,6 @@ const createNewThreadAtom = atom(null, (get, set, newThread: Thread) => {
     hasMore: false,
     waitingForResponse: false,
     lastMessage: undefined,
-    isFinishInit: false,
   }
   currentState[newThread.id] = threadState
   set(threadStatesAtom, currentState)
@@ -40,43 +51,74 @@ const createNewThreadAtom = atom(null, (get, set, newThread: Thread) => {
 })
 
 export const useCreateNewThread = () => {
-  const threadStates = useAtomValue(threadStatesAtom)
   const createNewThread = useSetAtom(createNewThreadAtom)
-  const setActiveThreadId = useSetAtom(setActiveThreadIdAtom)
+  const { setActiveThread } = useSetActiveThread()
   const updateThread = useSetAtom(updateThreadAtom)
-  const { deleteThread } = useDeleteThread()
+  const setFileUpload = useSetAtom(fileUploadAtom)
+  const setSelectedModel = useSetAtom(selectedModelAtom)
+  const setThreadModelParams = useSetAtom(setThreadModelParamsAtom)
+
+  const experimentalEnabled = useAtomValue(experimentalFeatureEnabledAtom)
+  const setIsGeneratingResponse = useSetAtom(isGeneratingResponseAtom)
+
+  const { recommendedModel, downloadedModels } = useRecommendedModel()
+
+  const threads = useAtomValue(threadsAtom)
+  const { stopInference } = useActiveModel()
 
   const requestCreateNewThread = async (
     assistant: Assistant,
     model?: Model | undefined
   ) => {
-    // loop through threads state and filter if there's any thread that is not finish init
-    let unfinishedInitThreadId: string | undefined = undefined
-    for (const key in threadStates) {
-      const isFinishInit = threadStates[key].isFinishInit ?? true
-      if (!isFinishInit) {
-        unfinishedInitThreadId = key
-        break
+    // Stop generating if any
+    setIsGeneratingResponse(false)
+    stopInference()
+
+    const defaultModel = model ?? recommendedModel ?? downloadedModels[0]
+
+    if (!model) {
+      // if we have model, which means user wants to create new thread from Model hub. Allow them.
+
+      // check last thread message, if there empty last message use can not create thread
+      const lastMessage = threads[0]?.metadata?.lastMessage
+
+      if (!lastMessage && threads.length) {
+        return null
       }
     }
 
-    if (unfinishedInitThreadId) {
-      await deleteThread(unfinishedInitThreadId)
+    // modify assistant tools when experimental on, retieval toggle enabled in default
+    const assistantTools: AssistantTool = {
+      type: 'retrieval',
+      enabled: true,
+      settings: assistant.tools && assistant.tools[0].settings,
     }
 
-    const modelId = model ? model.id : '*'
+    const overriddenSettings =
+      defaultModel?.settings.ctx_len && defaultModel.settings.ctx_len > 2048
+        ? { ctx_len: 2048 }
+        : {}
+
+    const overriddenParameters =
+      defaultModel?.parameters.max_tokens && defaultModel.parameters.max_tokens
+        ? { max_tokens: 2048 }
+        : {}
+
     const createdAt = Date.now()
     const assistantInfo: ThreadAssistantInfo = {
       assistant_id: assistant.id,
       assistant_name: assistant.name,
+      tools: experimentalEnabled ? [assistantTools] : assistant.tools,
       model: {
-        id: modelId,
-        settings: {},
-        parameters: {},
-        engine: undefined,
+        id: defaultModel?.id ?? '*',
+        settings: { ...defaultModel?.settings, ...overriddenSettings } ?? {},
+        parameters:
+          { ...defaultModel?.parameters, ...overriddenParameters } ?? {},
+        engine: defaultModel?.engine,
       },
       instructions: assistant.instructions,
     }
+
     const threadId = generateThreadId(assistant.id)
     const thread: Thread = {
       id: threadId,
@@ -88,20 +130,34 @@ export const useCreateNewThread = () => {
     }
 
     // add the new thread on top of the thread list to the state
+    //TODO: Why do we have thread list then thread states? Should combine them
     createNewThread(thread)
-    setActiveThreadId(thread.id)
+
+    setSelectedModel(defaultModel)
+    setThreadModelParams(thread.id, {
+      ...defaultModel?.settings,
+      ...defaultModel?.parameters,
+      ...overriddenSettings,
+    })
+
+    // Delete the file upload state
+    setFileUpload([])
+    // Update thread metadata
+    await updateThreadMetadata(thread)
+
+    setActiveThread(thread)
   }
 
-  function updateThreadMetadata(thread: Thread) {
-    updateThread(thread)
-    const threadState = threadStates[thread.id]
-    const isFinishInit = threadState?.isFinishInit ?? true
-    if (isFinishInit) {
-      extensionManager
-        .get<ConversationalExtension>(ExtensionType.Conversational)
+  const updateThreadMetadata = useCallback(
+    async (thread: Thread) => {
+      updateThread(thread)
+
+      await extensionManager
+        .get<ConversationalExtension>(ExtensionTypeEnum.Conversational)
         ?.saveThread(thread)
-    }
-  }
+    },
+    [updateThread]
+  )
 
   return {
     requestCreateNewThread,

@@ -15,10 +15,21 @@ export type ModelInfo = {
  */
 
 export enum InferenceEngine {
+  anthropic = 'anthropic',
+  mistral = 'mistral',
+  martian = 'martian',
+  openrouter = 'openrouter',
   nitro = 'nitro',
   openai = 'openai',
+  groq = 'groq',
   triton_trtllm = 'triton_trtllm',
-  hf_endpoint = 'hf_endpoint',
+  nitro_tensorrt_llm = 'nitro-tensorrt-llm',
+  cohere = 'cohere',
+}
+
+export type ModelArtifact = {
+  filename: string
+  url: string
 }
 
 /**
@@ -35,7 +46,7 @@ export type Model = {
   /**
    * The version of the model.
    */
-  version: number
+  version: string
 
   /**
    * The format of the model.
@@ -45,7 +56,7 @@ export type Model = {
   /**
    * The model download source. It can be an external url or a local filepath.
    */
-  source_url: string
+  sources: ModelArtifact[]
 
   /**
    * The model identifier, which can be referenced in the API endpoints.
@@ -104,6 +115,14 @@ export type ModelSettingParams = {
   n_parallel?: number
   cpu_threads?: number
   prompt_template?: string
+  system_prompt?: string
+  ai_prompt?: string
+  user_prompt?: string
+  llama_model_path?: string
+  mmproj?: string
+  cont_batching?: boolean
+  vision_model?: boolean
+  text_model?: boolean
 }
 
 /**
@@ -119,4 +138,9 @@ export type ModelRuntimeParams = {
   stop?: string[]
   frequency_penalty?: number
   presence_penalty?: number
+  engine?: string
+}
+
+export type ModelInitFailed = Model & {
+  error: Error
 }

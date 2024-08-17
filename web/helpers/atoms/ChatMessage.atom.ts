@@ -16,6 +16,8 @@ import {
  */
 export const chatMessages = atom<Record<string, ThreadMessage[]>>({})
 
+export const readyThreadsMessagesAtom = atom<Record<string, boolean>>({})
+
 /**
  * Return the chat messages for the current active conversation
  */
@@ -34,6 +36,10 @@ export const setConvoMessagesAtom = atom(
     }
     newData[threadId] = messages
     set(chatMessages, newData)
+    set(readyThreadsMessagesAtom, {
+      ...get(readyThreadsMessagesAtom),
+      [threadId]: true,
+    })
   }
 )
 
@@ -70,11 +76,12 @@ export const addNewMessageAtom = atom(
     set(chatMessages, newData)
 
     // Update thread last message
-    set(
-      updateThreadStateLastMessageAtom,
-      newMessage.thread_id,
-      newMessage.content
-    )
+    if (newMessage.content.length)
+      set(
+        updateThreadStateLastMessageAtom,
+        newMessage.thread_id,
+        newMessage.content
+      )
   }
 )
 
@@ -103,10 +110,16 @@ export const deleteMessageAtom = atom(null, (get, set, id: string) => {
   }
   const threadId = get(getActiveThreadIdAtom)
   if (threadId) {
-    newData[threadId] = newData[threadId].filter((e) => e.id !== id)
+    // Should also delete error messages to clear out the error state
+    newData[threadId] = newData[threadId].filter(
+      (e) => e.id !== id && e.status !== MessageStatus.Error
+    )
+
     set(chatMessages, newData)
   }
 })
+
+export const editMessageAtom = atom('')
 
 export const updateMessageAtom = atom(
   null,
@@ -131,7 +144,8 @@ export const updateMessageAtom = atom(
       newData[conversationId] = updatedMessages
       set(chatMessages, newData)
       // Update thread last message
-      set(updateThreadStateLastMessageAtom, conversationId, text)
+      if (text.length)
+        set(updateThreadStateLastMessageAtom, conversationId, text)
     }
   }
 )

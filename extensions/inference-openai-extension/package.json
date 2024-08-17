@@ -1,14 +1,16 @@
 {
   "name": "@janhq/inference-openai-extension",
-  "version": "1.0.0",
+  "productName": "OpenAI Inference Engine",
+  "version": "1.0.2",
   "description": "This extension enables OpenAI chat completion API calls",
   "main": "dist/index.js",
   "module": "dist/module.js",
+  "engine": "openai",
   "author": "Jan <service@jan.ai>",
   "license": "AGPL-3.0",
   "scripts": {
     "build": "tsc -b . && webpack --config webpack.config.js",
-    "build:publish": "rimraf *.tgz --glob && npm run build && npm pack && cpx *.tgz ../../electron/pre-install"
+    "build:publish": "rimraf *.tgz --glob && yarn build && npm pack && cpx *.tgz ../../pre-install"
   },
   "exports": {
     ".": "./dist/index.js",
@@ -18,14 +20,13 @@
     "cpx": "^1.5.0",
     "rimraf": "^3.0.2",
     "webpack": "^5.88.2",
-    "webpack-cli": "^5.1.4"
+    "webpack-cli": "^5.1.4",
+    "ts-loader": "^9.5.0"
   },
   "dependencies": {
     "@janhq/core": "file:../../core",
     "fetch-retry": "^5.0.6",
-    "path-browserify": "^1.0.1",
-    "ts-loader": "^9.5.0",
-    "ulid": "^2.3.0"
+    "ulidx": "^2.3.0"
   },
   "engines": {
     "node": ">=18.0.0"

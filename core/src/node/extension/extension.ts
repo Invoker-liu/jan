@@ -1,7 +1,5 @@
 import { rmdirSync } from 'fs'
 import { resolve, join } from 'path'
-import { manifest, extract } from 'pacote'
-import * as Arborist from '@npmcli/arborist'
 import { ExtensionManager } from './manager'
 
 /**
@@ -13,6 +11,7 @@ export default class Extension {
    * @property {string} origin Original specification provided to fetch the package.
    * @property {Object} installOptions Options provided to pacote when fetching the manifest.
    * @property {name} name The name of the extension as defined in the manifest.
+   * @property {name} productName The display name of the extension as defined in the manifest.
    * @property {string} url Electron URL where the package can be accessed.
    * @property {string} version Version of the package as defined in the manifest.
    * @property {string} main The entry point as defined in the main entry of the manifest.
@@ -21,6 +20,7 @@ export default class Extension {
   origin?: string
   installOptions: any
   name?: string
+  productName?: string
   url?: string
   version?: string
   main?: string
@@ -41,9 +41,10 @@ export default class Extension {
    * @param {Object} [options] Options provided to pacote when fetching the manifest.
    */
   constructor(origin?: string, options = {}) {
+    const Arborist = require('@npmcli/arborist')
     const defaultOpts = {
       version: false,
-      fullMetadata: false,
+      fullMetadata: true,
       Arborist,
     }
 
@@ -74,13 +75,16 @@ export default class Extension {
   async getManifest() {
     // Get the package's manifest (package.json object)
     try {
-      const mnf = await manifest(this.specifier, this.installOptions)
-
-      // set the Package properties based on the it's manifest
-      this.name = mnf.name
-      this.version = mnf.version
-      this.main = mnf.main
-      this.description = mnf.description
+      await import('pacote').then((pacote) => {
+        return pacote.manifest(this.specifier, this.installOptions).then((mnf) => {
+          // set the Package properties based on the it's manifest
+          this.name = mnf.name
+          this.productName = mnf.productName as string | undefined
+          this.version = mnf.version
+          this.main = mnf.main
+          this.description = mnf.description
+        })
+      })
     } catch (error) {
       throw new Error(`Package ${this.origin} does not contain a valid manifest: ${error}`)
     }
@@ -99,10 +103,11 @@ export default class Extension {
       await this.getManifest()
 
       // Install the package in a child folder of the given folder
-      await extract(
+      const pacote = await import('pacote')
+      await pacote.extract(
         this.specifier,
-        join(ExtensionManager.instance.extensionsPath ?? '', this.name ?? ''),
-        this.installOptions,
+        join(ExtensionManager.instance.getExtensionsPath() ?? '', this.name ?? ''),
+        this.installOptions
       )
 
       // Set the url using the custom extensions protocol
@@ -164,19 +169,23 @@ export default class Extension {
    * @returns the latest available version if a new version is available or false if not.
    */
   async isUpdateAvailable() {
-    if (this.origin) {
-      const mnf = await manifest(this.origin)
-      return mnf.version !== this.version ? mnf.version : false
-    }
+    return import('pacote').then((pacote) => {
+      if (this.origin) {
+        return pacote.manifest(this.origin).then((mnf) => {
+          return mnf.version !== this.version ? mnf.version : false
+        })
+      }
+    })
   }
 
   /**
    * Remove extension and refresh renderers.
    * @returns {Promise}
    */
-  async uninstall() {
-    const extPath = resolve(ExtensionManager.instance.extensionsPath ?? '', this.name ?? '')
-    await rmdirSync(extPath, { recursive: true })
+  async uninstall(): Promise<void> {
+    const path = ExtensionManager.instance.getExtensionsPath()
+    const extPath = resolve(path ?? '', this.name ?? '')
+    rmdirSync(extPath, { recursive: true })
 
     this.emitUpdate()
   }

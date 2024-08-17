@@ -1,1 +1,2 @@
-declare const MODULE: string;
+declare const NODE: string
+declare const VERSION: string

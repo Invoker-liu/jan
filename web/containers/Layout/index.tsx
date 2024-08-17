@@ -1,49 +1,92 @@
-import React, { PropsWithChildren, useEffect } from 'react'
+'use client'
 
-import { useTheme } from 'next-themes'
+import { useEffect } from 'react'
 
 import { motion as m } from 'framer-motion'
 
-import BottomBar from '@/containers/Layout/BottomBar'
-import RibbonNav from '@/containers/Layout/Ribbon'
+import { useAtom, useAtomValue } from 'jotai'
 
-import TopBar from '@/containers/Layout/TopBar'
+import { twMerge } from 'tailwind-merge'
 
-import { useMainViewState } from '@/hooks/useMainViewState'
+import BottomPanel from '@/containers/Layout/BottomPanel'
+import RibbonPanel from '@/containers/Layout/RibbonPanel'
 
-const BaseLayout = (props: PropsWithChildren) => {
-  const { children } = props
-  const { mainViewState } = useMainViewState()
+import TopPanel from '@/containers/Layout/TopPanel'
 
-  const { theme, setTheme } = useTheme()
+import { MainViewState } from '@/constants/screens'
+
+import { getImportModelStageAtom } from '@/hooks/useImportModel'
+
+import { SUCCESS_SET_NEW_DESTINATION } from '@/screens/Settings/Advanced/DataFolder'
+import CancelModelImportModal from '@/screens/Settings/CancelModelImportModal'
+import ChooseWhatToImportModal from '@/screens/Settings/ChooseWhatToImportModal'
+import EditModelInfoModal from '@/screens/Settings/EditModelInfoModal'
+import HuggingFaceRepoDetailModal from '@/screens/Settings/HuggingFaceRepoDetailModal'
+import ImportModelOptionModal from '@/screens/Settings/ImportModelOptionModal'
+import ImportingModelModal from '@/screens/Settings/ImportingModelModal'
+import SelectingModelModal from '@/screens/Settings/SelectingModelModal'
+
+import LoadingModal from '../LoadingModal'
+
+import MainViewContainer from '../MainViewContainer'
+
+import InstallingExtensionModal from './BottomPanel/InstallingExtension/InstallingExtensionModal'
+
+import { mainViewStateAtom } from '@/helpers/atoms/App.atom'
+import { reduceTransparentAtom } from '@/helpers/atoms/Setting.atom'
+
+const BaseLayout = () => {
+  const [mainViewState, setMainViewState] = useAtom(mainViewStateAtom)
+  const importModelStage = useAtomValue(getImportModelStageAtom)
+  const reduceTransparent = useAtomValue(reduceTransparentAtom)
 
   useEffect(() => {
-    setTheme(theme as string)
-  }, [setTheme, theme])
+    if (localStorage.getItem(SUCCESS_SET_NEW_DESTINATION) === 'true') {
+      setMainViewState(MainViewState.Settings)
+    }
+  }, [setMainViewState])
 
   return (
-    <div className="flex h-screen w-screen flex-1 overflow-hidden">
-      <RibbonNav />
-      <div className=" relative top-12 flex h-[calc(100vh-96px)] w-full overflow-hidden bg-background">
-        <div className="w-full">
-          <TopBar />
-          <m.div
-            key={mainViewState}
-            initial={{ opacity: 0, y: -8 }}
-            className="h-full"
-            animate={{
-              opacity: 1,
-              y: 0,
-              transition: {
-                duration: 0.5,
-              },
-            }}
-          >
-            {children}
-          </m.div>
-          <BottomBar />
+    <div
+      className={twMerge(
+        'h-screen text-sm',
+        reduceTransparent
+          ? 'bg-[hsla(var(--app-bg))]'
+          : 'bg-[hsla(var(--app-transparent))]'
+      )}
+    >
+      <TopPanel />
+      <div className="relative top-9 flex h-[calc(100vh-(36px+36px))] w-screen">
+        <RibbonPanel />
+        <div className={twMerge('relative flex w-full')}>
+          <div className="w-full">
+            <m.div
+              key={mainViewState}
+              initial={{ opacity: 0, y: -8 }}
+              className="h-full"
+              animate={{
+                opacity: 1,
+                y: 0,
+                transition: {
+                  duration: 0.5,
+                },
+              }}
+            >
+              <MainViewContainer />
+            </m.div>
+          </div>
         </div>
+        <LoadingModal />
+        {importModelStage === 'SELECTING_MODEL' && <SelectingModelModal />}
+        {importModelStage === 'MODEL_SELECTED' && <ImportModelOptionModal />}
+        {importModelStage === 'IMPORTING_MODEL' && <ImportingModelModal />}
+        {importModelStage === 'EDIT_MODEL_INFO' && <EditModelInfoModal />}
+        {importModelStage === 'CONFIRM_CANCEL' && <CancelModelImportModal />}
+        <ChooseWhatToImportModal />
+        <InstallingExtensionModal />
+        <HuggingFaceRepoDetailModal />
       </div>
+      <BottomPanel />
     </div>
   )
 }

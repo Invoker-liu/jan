@@ -1,93 +1,46 @@
-import {
-  Textarea,
-  Tooltip,
-  TooltipArrow,
-  TooltipContent,
-  TooltipPortal,
-  TooltipTrigger,
-} from '@janhq/uikit'
-
-import { useAtomValue, useSetAtom } from 'jotai'
+import { TextArea, Tooltip } from '@janhq/joi'
 
 import { InfoIcon } from 'lucide-react'
 
-import { useActiveModel } from '@/hooks/useActiveModel'
-import useUpdateModelParameters from '@/hooks/useUpdateModelParameters'
-
-import { getConfigurationsData } from '@/utils/componentSettings'
-
-import { toSettingParams } from '@/utils/model_param'
-
-import {
-  engineParamsUpdateAtom,
-  getActiveThreadIdAtom,
-  getActiveThreadModelParamsAtom,
-} from '@/helpers/atoms/Thread.atom'
-
 type Props = {
   title: string
+  disabled?: boolean
   name: string
   description: string
   placeholder: string
   value: string
+  onValueChanged?: (e: string | number | boolean) => void
 }
 
-const ModelConfigInput: React.FC<Props> = ({
+const ModelConfigInput = ({
   title,
-  name,
+  disabled = false,
   value,
   description,
   placeholder,
-}) => {
-  const { updateModelParameter } = useUpdateModelParameters()
-  const threadId = useAtomValue(getActiveThreadIdAtom)
-
-  const activeModelParams = useAtomValue(getActiveThreadModelParamsAtom)
-
-  const modelSettingParams = toSettingParams(activeModelParams)
-
-  const engineParams = getConfigurationsData(modelSettingParams)
-
-  const setEngineParamsUpdate = useSetAtom(engineParamsUpdateAtom)
-
-  const { stopModel } = useActiveModel()
-
-  const onValueChanged = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (!threadId) return
-    if (engineParams.some((x) => x.name.includes(name))) {
-      setEngineParamsUpdate(true)
-      stopModel()
-    } else {
-      setEngineParamsUpdate(false)
-    }
-    updateModelParameter(threadId, name, e.target.value)
-  }
-
-  return (
-    <div className="flex flex-col">
-      <div className="mb-2 flex items-center gap-x-2">
-        <p className="text-sm font-semibold text-zinc-500 dark:text-gray-300">
-          {title}
-        </p>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <InfoIcon size={16} className="flex-shrink-0 dark:text-gray-500" />
-          </TooltipTrigger>
-          <TooltipPortal>
-            <TooltipContent side="top" className="max-w-[240px]">
-              <span>{description}</span>
-              <TooltipArrow />
-            </TooltipContent>
-          </TooltipPortal>
-        </Tooltip>
-      </div>
-      <Textarea
-        placeholder={placeholder}
-        onChange={onValueChanged}
-        value={value}
+  onValueChanged,
+}: Props) => (
+  <div className="flex flex-col">
+    <div className="mb-2 flex items-center gap-x-2">
+      <p className="font-medium">{title}</p>
+      <Tooltip
+        trigger={
+          <InfoIcon
+            size={16}
+            className="flex-shrink-0 text-[hsla(var(--text-secondary))]"
+          />
+        }
+        content={description}
       />
     </div>
-  )
-}
+    <TextArea
+      placeholder={placeholder}
+      onChange={(e) => onValueChanged?.(e.target.value)}
+      cols={50}
+      value={value}
+      disabled={disabled}
+    />
+  </div>
+)
 
 export default ModelConfigInput
